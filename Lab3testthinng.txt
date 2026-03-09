@@ -1,0 +1,42 @@
+while (1){
+	//set up
+	
+	//collect button presses
+	for( int i = 0; i < 4; i++){
+		while(PA2 == 1){}//button not pressed, detect 
+		
+		nTimer(25);
+		
+		//create new link
+		initLink(&newLink);
+		//load data onto link node
+		newLink->e.itemCode = PINA & 0b00000011;
+		//enqueue link		
+		enqueue(&head, &tail, &newLink);		
+		
+		while( PA2){}//button pressed
+		
+		nTimer(25);
+	}
+
+	//dequeue
+	dequeue(&head, &rtnLink);//moves head pointer forward
+	//free
+	free(rtnLink);
+
+	
+	//output on 0/1
+	
+	//dequeue
+	dequeue(&head, &rtnLink);//moves head pointer forward
+	//free
+	free(rtnLink);
+	//delay
+	nTimer(2000);
+	
+	
+	
+
+
+
+}

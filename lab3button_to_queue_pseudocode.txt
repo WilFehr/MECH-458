@@ -1,0 +1,30 @@
+while (1){
+	if(PINX){//if the button is pressed set Pin correctly
+		nTimer(20);//wait 20ms
+		//create new link
+		initLink(&newLink);
+		//read the switch values, into new link
+		//add new link to end of queue
+				
+	}//end of button pressed handler
+	
+	if(size(&head, &tail) > 3) {//check to see if the queue is full
+		//dequeue first element and keep the pointer to that first link
+		//create new link pointer to be a secondary dequeued head
+		//read second element from head onto port
+		//dequeue using secondary dequeue
+		nTimer(2000);
+		
+		//read third element from head onto port
+		//dequeue using secondary dequeue
+		nTimer(2000);
+
+		//read forth element from head onto port
+		//dequeue using secondary dequeue
+		nTimer(2000);
+		
+		//clear using first dequeued pointer
+
+	}//end of send out queue
+	
+}
