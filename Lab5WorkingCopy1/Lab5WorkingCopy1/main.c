@@ -18,6 +18,17 @@
 
 
 /*******************    START OF DEFINES     *****************/
+//stepper states
+#define BLACK 1
+#define WHITE 2
+#define STEEL 3
+#define ALUM 4
+
+//state machine states
+#define polling 0
+#define reflective 1
+#define drop_result 2
+#define ending 10
 
 /******************    END OF DEFINES     *******************/
 
@@ -31,9 +42,13 @@ volatile unsigned char direction = 0;
 volatile unsigned char killed = 0;
 volatile char STATE;
 volatile int curposition = 0b00110000;
+volatile uint16_t curmaterialmin;
 
 	//constants
 const char steps_arr[4] = {0b00110000, 0b00000110, 0b00101000, 0b00000101};
+	
+	//non-volatile
+int delay = 20;//ms delay
 /****************    END OF GLOBAL VARIABLES   *****************/
 
 
@@ -44,6 +59,8 @@ void nTimer(int count);
 void home_stepper();//home in on black
 void turnCW90();//turn stepper
 void turnCCW90();//turn stepper
+void turnCW180();//turn stepper
+void turnCCW180();//turn stepper
 /***********    END OF FUCTION DECLARATIONS   ***************/
 
 
@@ -110,6 +127,14 @@ int main(void)
 /************ INTERRUPT CONFIG ************/
 	// config the external interrupt ======================================
 	//table15-1
+	EIMSK |= (_BV(INT0)); // enable INT0
+	EICRA |= _BV(ISC01); // rising edge interrupt
+	EICRA |= _BV(ISC00); // rising edge interrupt
+	
+	EIMSK |= (_BV(INT1)); // enable INT1
+	EICRA |= _BV(ISC11); // falling edge interrupt
+	EICRA &= ~_BV(ISC10); // falling edge interrupt
+	
 	EIMSK |= (_BV(INT2)); // enable INT2
 	EICRA |= _BV(ISC21); // falling edge interrupt
 	EICRA &= ~_BV(ISC20); // falling edge interrupt
@@ -122,11 +147,12 @@ int main(void)
 /********** ADC CONFIG ***************/
 	// by default, the ADC input (analog input is set to be ADC0 / PORTF0
 	ADCSRA |= _BV(ADEN);		// enable ADC
-	ADCSRA |= _BV(ADIE);		// enable interrupt of ADC
+	//ADCSRA |= _BV(ADIE);		// enable interrupt of ADC
 
 	//ADLAR- analog digital Left Adjust register
+	//get rid of _BV(ADLAR)
 	//REFS0- reference selection(turn on capacitor at AVCC
-	ADMUX |= _BV(ADLAR) | _BV(REFS0); // Read Technical Manual & Complete Comment
+	ADMUX |= _BV(REFS0) | _BV(ADLAR); // Read Technical Manual & Complete Comment
 
 /********** END ADC CONFIG ***************/
 	
@@ -149,11 +175,61 @@ int main(void)
 	
 	STATE = 0;
 
+	goto POLLING_STAGE;
 	
+	//polling state
+	POLLING_STAGE:
+	switch(STATE){
+		case(polling):
+		goto POLLING_STAGE;
+		break;
+		
+		case(reflective):
+		goto REFLECTIVE_STAGE;
+		break;
+		
+		case(drop_result):
+		goto DROP_STAGE;
+		break;
+		
+		case(ending):
+		goto END_STAGE;
+		
+		default:
+		goto POLLING_STAGE;
+	}//end of switch polling
 	
-    while (1) 
-    {
-    }
+    REFLECTIVE_STAGE:
+		while(){//OR pin is active
+			if(ADC_result_flag == 0){
+				ADCSRA |= _BV(ADSC);//analog digital start one conversion
+			}else{
+				if(ADC_result < curmaterialmin){
+					curmaterialmin = ADC_result;
+				}
+				ADC_result_flag = 0;
+			}//end of ADC result check
+		
+			/* 
+			add material to queue
+			(before adding check with display)
+			*/
+			
+		}//end of while
+		
+		goto POLLING_STAGE;
+		
+	DROP_STAGE:
+		//brake to vcc
+		PORTB |= 0b00001111;
+		nTimer(25);
+		//read material from queue
+		
+		//move stepper to section
+		
+		//start belt
+		PORTB = 0b00001101;
+	END_STAGE:
 }
 
 void nTimer(int count){
@@ -205,28 +281,6 @@ void nTimer(int count){
 	return;
 }//end nTimer
 
-/*
-void turnCW(int steps){
-	for(int i =0; i < steps; i++){
-		//increment current position
-		curposition++;
-		//test if valid
-		if(curposition > 3 ){
-			curposition = 0;
-		}
-		//output A to current step
-		PORTA = steps_arr[curposition];
-		//delay 20ms
-		nTimer(20);
-		
-	}//end for
-	
-	return;
-}//end cw
-*/
-
-
-//int steps_to_stop = 
 
 void home_stepper(){
 	while((PINL & 0b10000000) == 0b10000000 ){//Sensor_ex != 1;
@@ -245,6 +299,7 @@ void home_stepper(){
 
 //trap accel
 void turnCW90(){
+	delay = 20;
 	for(int i =0; i < 50; i++){
 		//increment current position
 		curposition++;
@@ -255,7 +310,7 @@ void turnCW90(){
 		//output A to current step
 		PORTA = steps_arr[curposition];
 		
-		int delay = ((i<10)?(20-(1+i)/2):10);
+		delay = ((i<10)?(20-(1+i)/2):10);
 		delay = ((i>39)?(i-30):(delay));
 		//delay 20ms-
 		nTimer(delay);
@@ -265,8 +320,9 @@ void turnCW90(){
 	return;
 }//end cw
 
-
+//trap accel
 void turnCCW90(){
+	delay = 20;
 	for(int i =0; i < 50; i++){
 		//increment curposition(can use ternary and assignment) and
 		curposition--;
@@ -278,7 +334,7 @@ void turnCCW90(){
 		PORTA = steps_arr[curposition];
 		//delay 20ms
 		
-		int delay = ((i<10)?(20-(1+i)/2):10);
+		delay = ((i<10)?(20-(1+i)/2):10);
 		delay = ((i>39)?(i-30):(delay));
 		//delay 20ms-
 		nTimer(delay);
@@ -286,4 +342,119 @@ void turnCCW90(){
 	}
 	
 	return;
+}
+
+//trap accel
+void turnCCW180(){
+	delay = 20;
+	for(int i =0; i < 100; i++){
+		//increment curposition(can use ternary and assignment) and
+		curposition--;
+		//test if valid
+		if(curposition < 0 ){
+			curposition = 3;
+		}
+		//output A to current step
+		PORTA = steps_arr[curposition];
+		//delay 20ms
+		
+		delay = ((i<10)?(20-(1+i)/2):10);
+		delay = ((i>89)?(i-80):(delay));
+		//delay 20ms-
+		nTimer(delay);
+		
+	}
+	
+	return;
+}
+
+//trap accel
+void turnCW90(){
+	delay = 20;
+	for(int i =0; i < 100; i++){
+		//increment current position
+		curposition++;
+		//test if valid
+		if(curposition > 3 ){
+			curposition = 0;
+		}
+		//output A to current step
+		PORTA = steps_arr[curposition];
+		
+		delay = ((i<10)?(20-(1+i)/2):10);
+		delay = ((i>89)?(i-80):(delay));
+		//delay 20ms-
+		nTimer(delay);
+		
+	}//end for
+	
+	return;
+}//end cw
+
+/*
+
+isr
+
+pause/resume
+
+
+ramp down
+use external timer
+
+
+*/
+ISR(ADC_vect){
+	ADC_result = ADCH;
+	//ADC_result += (ADCH << 8)//adjust to 10bit mode
+	ADC_result_flag = 1;
+}
+
+//int0 EX
+ISR(INT0_vect){
+	
+}
+
+//int1 OR
+ISR(INT1_vect){
+	
+}
+
+//int2 kill switch
+ISR(INT2_vect){//on int2 falling edge(active low)
+	
+	//brake to vcc
+	PORTB |= 0b00001111;
+
+	killed = 1;
+	
+	
+	
+	
+}
+
+//int3 change direction
+ISR(INT3_vect){//on rising edge(active high)
+	if((PIND & 0x08) == 0x08){
+		//debounce
+		nTimer(25);
+		
+		//flip bit 0 of the direction
+		direction ^= 0x01;
+		//store inverse of current direction
+		change_dir = PORTB ^ 0b00001010;
+		//turn on in a and in b(break to Vcc)
+		PORTB |= 0b00001111;
+		nTimer(5);
+		PORTB = change_dir;
+		
+		//debounce
+		while((PIND & 0x08) == 0x08);//loop while PD3 is high
+		nTimer(25);
+	}
+	
+}
+
+ISR(BADISR_vect)
+{
+	PORTC = 0xFF;
 }
