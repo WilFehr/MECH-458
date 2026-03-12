@@ -37,13 +37,14 @@
 
 /****************    START OF GLOBAL VARIABLES   ***************/
 volatile uint16_t ADC_result;//16-bit result should be able to hold 10 bit value
-volatile unsigned int ADC_result_flag;
+volatile unsigned int ADC_result_flag = 0;
 volatile unsigned char change_dir;
 volatile unsigned char direction = 0;
 volatile unsigned char killed = 0;
 volatile char STATE;
 volatile int curposition = 0b00110000;
 volatile uint16_t curmaterialmin;
+volatile int reflect_count = 0;
 
 	//constants
 const char steps_arr[4] = {0b00110000, 0b00000110, 0b00101000, 0b00000101};
@@ -120,8 +121,8 @@ int main(void)
 	
 /****** LCD INIT *******/ 
 	//Initialize LCD module
-	//InitLCD(LS_BLINK|LS_ULINE);
-	//LCDClear();
+	InitLCD(LS_BLINK|LS_ULINE);
+	LCDClear();
 /****** END LCD INIT ******/
 
 
@@ -148,12 +149,12 @@ int main(void)
 /********** ADC CONFIG ***************/
 	// by default, the ADC input (analog input is set to be ADC0 / PORTF0
 	ADCSRA |= _BV(ADEN);		// enable ADC
-	//ADCSRA |= _BV(ADIE);		// enable interrupt of ADC
+	ADCSRA |= _BV(ADIE);		// enable interrupt of ADC
 
 	//ADLAR- analog digital Left Adjust register
 	//get rid of _BV(ADLAR)
 	//REFS0- reference selection(turn on capacitor at AVCC
-	ADMUX |= _BV(REFS0) | _BV(ADLAR); // Read Technical Manual & Complete Comment
+	ADMUX |= _BV(REFS0); // Read Technical Manual & Complete Comment
 
 /********** END ADC CONFIG ***************/
 	
@@ -173,6 +174,8 @@ int main(void)
  /****************          END PWM INIT             **************************/
 	
 	//home_stepper();
+	
+	PORTB = 0b00001101;
 	
 	STATE = 0;
 
@@ -201,9 +204,10 @@ int main(void)
 	}//end of switch polling
 	
     REFLECTIVE_STAGE:
-	/*
-		ADCSRA |= _BV(ADIE);		// enable interrupt of ADC
-
+		
+		curmaterialmin = 1024;
+		reflect_count = 0;
+		
 		while((PIND & 0x01) == 0x01 ){//OR pin is active
 			if(ADC_result_flag == 0){
 				ADCSRA |= _BV(ADSC);//analog digital start one conversion
@@ -212,23 +216,32 @@ int main(void)
 					curmaterialmin = ADC_result;
 				}
 				ADC_result_flag = 0;
+				reflect_count++;
 			}//end of ADC result check
 		
 			
 			//add material to queue
 			//(before adding check with display)
 			
-			
-			
 		}//end of while
-		ADCSRA &= ~_BV(ADIE);		// enable interrupt of ADC
-	*/
-		nTimer(1000);
-		PORTC ^= 0x20;
-		goto END_STAGE;
+
+		//while((PIND & 0x01) == 0x01);
+		//nTimer(25);
+		
+		if(reflect_count > 0){
+			LCDClear();
+			LCDWriteStringXY(0, 0, "Mat Val:")
+			LCDWriteIntXY(10, 0, curmaterialmin, 5);
+			LCDWriteStringXY(0, 1, "Val Count:")
+			LCDWriteIntXY(11, 1, reflect_count, 5);
+			//nTimer(4000);
+		}
+		STATE = 0;
+		goto POLLING_STAGE;
 		
 		
 	DROP_STAGE:
+		STATE = 0;
 	/*
 		//brake to vcc
 		PORTB |= 0b00001111;
@@ -240,14 +253,17 @@ int main(void)
 		//start belt
 		PORTB = 0b00001101;
 	*/
-		nTimer(1000);
-		PORTC ^= 0x80;
-		goto END_STAGE;
+		//LCDClear();
+		//LCDWriteString("DROP");
+		//nTimer(3000);
+		goto POLLING_STAGE;
 		
 	END_STAGE:
-	nTimer(1000);
+		STATE = 0;
 		PORTB |= 0b00001111;
-		PORTC ^= 0x0F;
+		LCDClear();
+		LCDWriteString("END");
+		nTimer(3000);
 }
 
 void nTimer(int count){
@@ -422,26 +438,21 @@ use external timer
 
 */
 ISR(ADC_vect){
-	ADC_result = ADCH;
-	//ADC_result += (ADCH << 8)//adjust to 10bit mode
+	ADC_result = ADCL;
+	ADC_result += (ADCH << 8);//adjust to 10bit mode
 	ADC_result_flag = 1;
 }
 
 //int0 OR opposite reflect
 ISR(INT0_vect){
 	if((PIND & 0x01) == 0x01){
-		//ADCSRA |= _BV(ADIE);		// enable interrupt of ADC
-		PORTC ^= 0x10;
-		nTimer(1000);
 		STATE = reflective;
 	}
 }
 
 //int1 EX end of belt sensor
 ISR(INT1_vect){
-	if((PIND & 0x02) == 0x02){
-		PORTC ^= 0x40;
-		nTimer(1000);
+	if((PIND & 0x02) != 0x02){
 		STATE = drop_result;
 	}
 }
@@ -449,13 +460,11 @@ ISR(INT1_vect){
 //int2 kill switch
 ISR(INT2_vect){//on int2 falling edge(active low)
 	
-	//brake to vcc
 	PORTB |= 0b00001111;
+	LCDClear();
+	LCDWriteString("KILLED");
 
 	while(1);
-	
-	
-	
 	
 }
 
@@ -483,5 +492,7 @@ ISR(INT3_vect){//on rising edge(active high)
 
 ISR(BADISR_vect)
 {
-	PORTC = 0xF0;
+	LCDClear();
+	LCDWriteString("ISR BAD");
+	nTimer(3000);
 }
