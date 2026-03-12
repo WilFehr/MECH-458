@@ -11,6 +11,7 @@
 #include <avr/interrupt.h>
 #include <avr/io.h>
 #include "lcd.h"
+#include "LinkedQueue.h"
 #include <stdint.h>
 
 /*******************  END OF INCLUDES  ************************/
@@ -119,8 +120,8 @@ int main(void)
 	
 /****** LCD INIT *******/ 
 	//Initialize LCD module
-	InitLCD(LS_BLINK|LS_ULINE);
-	LCDClear();
+	//InitLCD(LS_BLINK|LS_ULINE);
+	//LCDClear();
 /****** END LCD INIT ******/
 
 
@@ -200,7 +201,10 @@ int main(void)
 	}//end of switch polling
 	
     REFLECTIVE_STAGE:
-		while(){//OR pin is active
+	/*
+		ADCSRA |= _BV(ADIE);		// enable interrupt of ADC
+
+		while((PIND & 0x01) == 0x01 ){//OR pin is active
 			if(ADC_result_flag == 0){
 				ADCSRA |= _BV(ADSC);//analog digital start one conversion
 			}else{
@@ -210,16 +214,22 @@ int main(void)
 				ADC_result_flag = 0;
 			}//end of ADC result check
 		
-			/* 
-			add material to queue
-			(before adding check with display)
-			*/
+			
+			//add material to queue
+			//(before adding check with display)
+			
+			
 			
 		}//end of while
+		ADCSRA &= ~_BV(ADIE);		// enable interrupt of ADC
+	*/
+		nTimer(1000);
+		PORTC ^= 0x20;
+		goto END_STAGE;
 		
-		goto POLLING_STAGE;
 		
 	DROP_STAGE:
+	/*
 		//brake to vcc
 		PORTB |= 0b00001111;
 		nTimer(25);
@@ -229,7 +239,15 @@ int main(void)
 		
 		//start belt
 		PORTB = 0b00001101;
+	*/
+		nTimer(1000);
+		PORTC ^= 0x80;
+		goto END_STAGE;
+		
 	END_STAGE:
+	nTimer(1000);
+		PORTB |= 0b00001111;
+		PORTC ^= 0x0F;
 }
 
 void nTimer(int count){
@@ -369,7 +387,7 @@ void turnCCW180(){
 }
 
 //trap accel
-void turnCW90(){
+void turnCW180(){
 	delay = 20;
 	for(int i =0; i < 100; i++){
 		//increment current position
@@ -409,14 +427,23 @@ ISR(ADC_vect){
 	ADC_result_flag = 1;
 }
 
-//int0 EX
+//int0 OR opposite reflect
 ISR(INT0_vect){
-	
+	if((PIND & 0x01) == 0x01){
+		//ADCSRA |= _BV(ADIE);		// enable interrupt of ADC
+		PORTC ^= 0x10;
+		nTimer(1000);
+		STATE = reflective;
+	}
 }
 
-//int1 OR
+//int1 EX end of belt sensor
 ISR(INT1_vect){
-	
+	if((PIND & 0x02) == 0x02){
+		PORTC ^= 0x40;
+		nTimer(1000);
+		STATE = drop_result;
+	}
 }
 
 //int2 kill switch
@@ -425,7 +452,7 @@ ISR(INT2_vect){//on int2 falling edge(active low)
 	//brake to vcc
 	PORTB |= 0b00001111;
 
-	killed = 1;
+	while(1);
 	
 	
 	
@@ -456,5 +483,5 @@ ISR(INT3_vect){//on rising edge(active high)
 
 ISR(BADISR_vect)
 {
-	PORTC = 0xFF;
+	PORTC = 0xF0;
 }
