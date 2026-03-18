@@ -46,11 +46,15 @@ volatile int curposition = 0b00110000;
 volatile uint16_t curmaterialmin;
 volatile int reflect_count = 0;
 
+
 	//constants
 const char steps_arr[4] = {0b00110000, 0b00000110, 0b00101000, 0b00000101};
 	
 	//non-volatile
 int delay = 20;//ms delay
+link* headptr;
+link* tailptr;
+link* newlink;
 /****************    END OF GLOBAL VARIABLES   *****************/
 
 
@@ -174,6 +178,8 @@ int main(void)
  /****************          END PWM INIT             **************************/
 	
 	//home_stepper();
+	setup(&headptr, &tailptr);
+	
 	
 	PORTB = 0b00001101;
 	
@@ -220,19 +226,55 @@ int main(void)
 			}//end of ADC result check
 		
 			
-			//add material to queue
-			//(before adding check with display)
-			
 		}//end of while
-
+		
+		
+		
 		//while((PIND & 0x01) == 0x01);
 		//nTimer(25);
 		
 		if(reflect_count > 0){
+
+			//add material to queue
+			//(before adding check with display)
+			/*
+			char material_type = 0;
+		
+			if(curmaterialmin > 930){//black
+				material_type = BLACK;
+			}else if(curmaterialmin > 700){//white
+				material_type = WHITE;
+			}else if(curmaterialmin > 300){//steel
+				material_type = STEEL;
+			}else{//alum
+				material_type = ALUM;
+			}
+			*/
+			
+			/*
+			//create link
+			
+			initLink(&newlink);
+			(*newlink)->(e.itemcode) = material_type;
+			*/
+			
 			LCDClear();
-			LCDWriteStringXY(0, 0, "Mat Val:")
-			LCDWriteIntXY(10, 0, curmaterialmin, 5);
-			LCDWriteStringXY(0, 1, "Val Count:")
+			LCDWriteStringXY(0, 0, "Mat Val:");
+			//LCDWriteIntXY(10, 0, curmaterialmin, 5);
+			/*
+			if( material_type == BLACK){
+				LCDWriteStringXY(10, 0, "BLACK");
+			}else if( material_type == WHITE ){
+				LCDWriteStringXY(10, 0, "WHITE");
+			}else if( material_type == STEEL ){
+				LCDWriteStringXY(10, 0, "STEEL");
+			}else if( material_type == ALUM ){
+				LCDWriteStringXY(10, 0, "ALUM");
+			}
+			
+			
+			*/
+			LCDWriteStringXY(0, 1, "Val Count:");
 			LCDWriteIntXY(11, 1, reflect_count, 5);
 			//nTimer(4000);
 		}
