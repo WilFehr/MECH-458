@@ -46,7 +46,6 @@ volatile int curposition = 0b00110000;
 volatile uint16_t curmaterialmin;
 volatile int reflect_count = 0;
 
-
 	//constants
 const char steps_arr[4] = {0b00110000, 0b00000110, 0b00101000, 0b00000101};
 	
@@ -55,6 +54,8 @@ int delay = 20;//ms delay
 link* headptr;
 link* tailptr;
 link* newlink;
+link *rtnlink;		
+element eTest;
 /****************    END OF GLOBAL VARIABLES   *****************/
 
 
@@ -237,7 +238,7 @@ int main(void)
 
 			//add material to queue
 			//(before adding check with display)
-			/*
+			
 			char material_type = 0;
 		
 			if(curmaterialmin > 930){//black
@@ -249,34 +250,15 @@ int main(void)
 			}else{//alum
 				material_type = ALUM;
 			}
-			*/
 			
-			/*
+			
+			
 			//create link
 			//idk how this work so this is a guess
 			initLink(&newlink);
-			(*newlink)->(e.itemcode) = material_type;
-			
+			newlink->e.itemCode = material_type;
 			enqueue(&headptr, &tailptr, &newlink);
 			
-			*/
-			
-			LCDClear();
-			LCDWriteStringXY(0, 0, "Mat Val:");
-			//LCDWriteIntXY(10, 0, curmaterialmin, 5);
-			/*
-			if( material_type == BLACK){
-				LCDWriteStringXY(10, 0, "BLACK");
-			}else if( material_type == WHITE ){
-				LCDWriteStringXY(10, 0, "WHITE");
-			}else if( material_type == STEEL ){
-				LCDWriteStringXY(10, 0, "STEEL");
-			}else if( material_type == ALUM ){
-				LCDWriteStringXY(10, 0, "ALUM");
-			}
-			
-			
-			*/
 			LCDWriteStringXY(0, 1, "Val Count:");
 			LCDWriteIntXY(11, 1, reflect_count, 5);
 			//nTimer(4000);
@@ -287,17 +269,32 @@ int main(void)
 		
 	DROP_STAGE:
 		STATE = 0;
-	/*
+		
 		//brake to vcc
 		PORTB |= 0b00001111;
 		nTimer(25);
-		//read material from queue
 		
+		char material_type = 0;
+		
+		//read material from queue
+		dequeue(&headptr, &tailptr, &rtnlink); // remove the item at the head of the list
+		material_type = rtnlink->e.itemCode;
+				
+		if( material_type == BLACK){
+			LCDWriteStringXY(10, 0, "BLACK");
+			}else if( material_type == WHITE ){
+			LCDWriteStringXY(10, 0, "WHITE");
+			}else if( material_type == STEEL ){
+			LCDWriteStringXY(10, 0, "STEEL");
+			}else if( material_type == ALUM ){
+			LCDWriteStringXY(10, 0, "ALUM");
+		}
 		//move stepper to section
 		
 		//start belt
 		PORTB = 0b00001101;
-	*/
+	
+	
 		//LCDClear();
 		//LCDWriteString("DROP");
 		//nTimer(3000);
