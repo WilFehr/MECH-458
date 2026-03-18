@@ -253,9 +253,12 @@ int main(void)
 			
 			/*
 			//create link
-			
+			//idk how this work so this is a guess
 			initLink(&newlink);
 			(*newlink)->(e.itemcode) = material_type;
+			
+			enqueue(&headptr, &tailptr, &newlink);
+			
 			*/
 			
 			LCDClear();
