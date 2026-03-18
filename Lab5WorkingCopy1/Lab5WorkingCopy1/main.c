@@ -20,10 +20,10 @@
 
 /*******************    START OF DEFINES     *****************/
 //stepper states
-#define BLACK 1
+#define BLACK 0
+#define STEEL 1
 #define WHITE 2
-#define STEEL 3
-#define ALUM 4
+#define ALUM 3
 
 //state machine states
 #define polling 0
@@ -45,6 +45,7 @@ volatile char STATE;
 volatile int curposition = 0b00110000;
 volatile uint16_t curmaterialmin;
 volatile int reflect_count = 0;
+char curMode;
 
 	//constants
 const char steps_arr[4] = {0b00110000, 0b00000110, 0b00101000, 0b00000101};
@@ -178,9 +179,9 @@ int main(void)
 	 OCR0A = 0x40;//64(25%)
  /****************          END PWM INIT             **************************/
 	
-	//home_stepper();
+	home_stepper();
 	setup(&headptr, &tailptr);
-	
+	curMode = 0;//to black
 	
 	PORTB = 0b00001101;
 	
@@ -279,7 +280,9 @@ int main(void)
 		//read material from queue
 		dequeue(&headptr, &tailptr, &rtnlink); // remove the item at the head of the list
 		material_type = rtnlink->e.itemCode;
-				
+		free(rtnlink);
+		
+		
 		if( material_type == BLACK){
 			LCDWriteStringXY(10, 0, "BLACK");
 			}else if( material_type == WHITE ){
@@ -290,6 +293,31 @@ int main(void)
 			LCDWriteStringXY(10, 0, "ALUM");
 		}
 		//move stepper to section
+		
+		curMode = ((curMode + material_type) % 4);
+
+		switch(curMode){
+			case(0):
+			break;
+			
+			case(1)://ccw
+			turnCCW90();
+			break;
+
+			case(2)://180
+			turnCW180();
+			break;
+
+			case(3)://cw
+			turnCW180();
+			break;
+			
+			default:
+			PORTB |= 0b00001111;
+			LCDClear();
+			LCDWriteString("KILLED stepper");
+			while(1);
+		}
 		
 		//start belt
 		PORTB = 0b00001101;
