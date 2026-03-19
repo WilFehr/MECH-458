@@ -176,7 +176,7 @@ int main(void)
  
 	 //output compare register
 	 //8 bit count this is duty cycle
-	 OCR0A = 0x40;//64(25%)
+	 OCR0A = 0x60;//96(37.5%?)
  /****************          END PWM INIT             **************************/
 	
 	home_stepper();
@@ -293,31 +293,19 @@ int main(void)
 			LCDWriteStringXY(10, 0, "ALUM");
 		}
 		//move stepper to section
-		
-		curMode = ((curMode + material_type) % 4);
-
-		switch(curMode){
-			case(0):
-			break;
-			
-			case(1)://ccw
+		if(material_type == curMode){
+			curMode = material_type;
+		}else if(material_type == ((curMode + 1)%4) ){
 			turnCCW90();
-			break;
-
-			case(2)://180
-			turnCW180();
-			break;
-
-			case(3)://cw
-			turnCW180();
-			break;
-			
-			default:
-			PORTB |= 0b00001111;
-			LCDClear();
-			LCDWriteString("KILLED stepper");
-			while(1);
+			curMode = material_type;
+		}else if(material_type == ((curMode + 2)%4)){
+			turnCCW180();
+			curMode = material_type;
+		}else if(material_type == ((curMode + 3)%4)){
+			turnCW90();
+			curMode = material_type;
 		}
+		
 		
 		//start belt
 		PORTB = 0b00001101;
@@ -387,7 +375,18 @@ void nTimer(int count){
 
 
 void home_stepper(){
-	while((PINL & 0b10000000) == 0b10000000 ){//Sensor_ex != 1;
+	for(int i = 0; i < 25; i++){
+		curposition++;
+		//test if valid
+		if(curposition > 3 ){
+			curposition = 0;
+		}
+		//output A to current step
+		PORTA = steps_arr[curposition];
+		//delay 20ms
+		nTimer(20);
+	}
+	while((PINL & 0b10000000) == 0b10000000 ){//Sensor_HE != 1;
 		//increment current position
 		curposition++;
 		//test if valid
