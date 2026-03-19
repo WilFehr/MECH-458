@@ -45,13 +45,14 @@ volatile char STATE;
 volatile int curposition = 0b00110000;
 volatile uint16_t curmaterialmin;
 volatile int reflect_count = 0;
-char curMode;
+
 
 	//constants
 const char steps_arr[4] = {0b00110000, 0b00000110, 0b00101000, 0b00000101};
 	
 	//non-volatile
 int delay = 20;//ms delay
+char curMode;
 link* headptr;
 link* tailptr;
 link* newlink;
