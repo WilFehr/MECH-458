@@ -31,7 +31,6 @@
 #define drop_result 2
 #define pause 3
 #define ramp_down 4
-#define ending 10
 
 /******************    END OF DEFINES     *******************/
 
@@ -51,10 +50,15 @@ volatile int reflect_count = 0;
 
 
 	//constants
-const char steps_arr[4] = {0b00110000, 0b00000110, 0b00101000, 0b00000101};
+const char steps_arr[4] = {
+	0b00110110,  // A+, B+
+	0b00101110,  // A-, B+
+	0b00101101,  // A-, B-
+	0b00110101   // A+, B-
+};
 	
 	//non-volatile
-int delay = 20;//ms delay
+int delay = 10;//ms delay
 char curMode;
 link* headptr;
 link* tailptr;
@@ -172,7 +176,7 @@ int main(void)
 	sei();//global interrupt enable
 	
  /****************           PWM INIT             **************************/
-	 //set up port B for fast PWM, fast pwm WGM0,WGM1 all high
+	 //set up port B for fast PWM, fast PWM WGM0,WGM1 all high
 	 //com0a1, is clear OC0A on compare match, (table 16-2)
 	 TCCR0A |= 0b10000011;//sets both WGM01 and WGM00 to one also set COM0A1 to one,
  
@@ -214,7 +218,7 @@ int main(void)
 		goto DROP_STAGE;
 		break;
 		
-		case(ending):
+		case(ramp_down):
 		goto END_STAGE;
 		
 		default:
@@ -227,21 +231,24 @@ int main(void)
 		LCDWriteString("PAUSED");
 		
 		//the paused prints
-		/*
+		
 		LCDWriteStringXY(0, 0, "PAUSED");
 		
-		LCDWriteStringXY(0, 1, "B:");
-		LCDWriteIntXY(2, 1, stored[BLACK], 2);
+		LCDWriteStringXY(7, 0, "B:");
+		LCDWriteIntXY(9, 0, sorted[BLACK], 2);
 		
-		LCDWriteStringXY(3, 1, " S:");
-		LCDWriteIntXY(9, 1, stored[STEEL], 2);
+		LCDWriteStringXY(12, 0, "S:");
+		LCDWriteIntXY(14, 0, sorted[STEEL], 2);
 
-		LCDWriteStringXY(12, 1, " W:");
-		LCDWriteIntXY(15, 1, stored[WHITE], 2);
+		LCDWriteStringXY(7, 1, "W:");
+		LCDWriteIntXY(9, 1, sorted[WHITE], 2);
 		
-		LCDWriteStringXY(0, 1, " A:");
-		LCDWriteIntXY(3, 1, stored[ALUM], 2);
-		*/
+		LCDWriteStringXY(12, 1, "A:");
+		LCDWriteIntXY(14, 1, sorted[ALUM], 2);
+				
+		LCDWriteStringXY(0, 1, "BB:");
+		LCDWriteIntXY(3, 1, sorted[4], 2);
+		
 		
 		if(paused_check == 0x01){//toggle state
 			PORTB = 0b00001101;
@@ -425,7 +432,7 @@ void nTimer(int count){
 
 
 void home_stepper(){
-	for(int i = 0; i < 25; i++){
+	for(int i = 0; i < 5000; i++){
 		curposition++;
 		//test if valid
 		if(curposition > 3 ){
