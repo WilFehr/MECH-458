@@ -29,6 +29,8 @@
 #define polling 0
 #define reflective 1
 #define drop_result 2
+#define pause 3
+#define ramp_down 4
 #define ending 10
 
 /******************    END OF DEFINES     *******************/
@@ -39,6 +41,7 @@
 volatile uint16_t ADC_result;//16-bit result should be able to hold 10 bit value
 volatile unsigned int ADC_result_flag = 0;
 volatile unsigned char change_dir;
+volatile unsigned char paused_check = 1;
 volatile unsigned char direction = 0;
 volatile unsigned char killed = 0;
 volatile char STATE;
@@ -58,6 +61,7 @@ link* tailptr;
 link* newlink;
 link *rtnlink;		
 element eTest;
+char sorted[5] = {0, 0, 0, 0, 0};//Black, Steel, White, Alum, between sensor
 /****************    END OF GLOBAL VARIABLES   *****************/
 
 
@@ -197,6 +201,10 @@ int main(void)
 		goto POLLING_STAGE;
 		break;
 		
+		case(pause):
+		goto PAUSE_STAGE;
+		break;
+		
 		case(reflective):
 		goto REFLECTIVE_STAGE;
 		break;
@@ -211,6 +219,34 @@ int main(void)
 		default:
 		goto POLLING_STAGE;
 	}//end of switch polling
+	
+	PAUSE_STAGE:
+		PORTB = 0b00001111;//break to vcc
+		
+		//the paused prints
+		/*
+		LCDWriteStringXY(0, 0, "PAUSED");
+		
+		LCDWriteStringXY(0, 1, "B:");
+		LCDWriteIntXY(2, 1, stored[BLACK], 2);
+		
+		LCDWriteStringXY(3, 1, " S:");
+		LCDWriteIntXY(9, 1, stored[STEEL], 2);
+
+		LCDWriteStringXY(12, 1, " W:");
+		LCDWriteIntXY(15, 1, stored[WHITE], 2);
+		
+		LCDWriteStringXY(0, 1, " A:");
+		LCDWriteIntXY(3, 1, stored[ALUM], 2);
+		*/
+		
+		if(paused_check == 0x01){//toggle state
+			PORTB = 0b00001101;
+			STATE = polling;
+			goto POLLING_STAGE;
+		}
+	
+	goto PAUSE_STAGE;
 	
     REFLECTIVE_STAGE:
 		
@@ -260,6 +296,7 @@ int main(void)
 			initLink(&newlink);
 			newlink->e.itemCode = material_type;
 			enqueue(&headptr, &tailptr, &newlink);
+			sorted[4] += 1;//add 1 to the between sensors
 			
 			LCDWriteStringXY(0, 1, "Val Count:");
 			LCDWriteIntXY(11, 1, reflect_count, 5);
@@ -286,13 +323,22 @@ int main(void)
 		
 		if( material_type == BLACK){
 			LCDWriteStringXY(10, 0, "BLACK");
-			}else if( material_type == WHITE ){
+			sorted[4] -= 1;
+			sorted[BLACK] += 1;
+		}else if( material_type == WHITE ){
 			LCDWriteStringXY(10, 0, "WHITE");
-			}else if( material_type == STEEL ){
+			sorted[4] -= 1;
+			sorted[WHITE] += 1;
+		}else if( material_type == STEEL ){
 			LCDWriteStringXY(10, 0, "STEEL");
-			}else if( material_type == ALUM ){
+			sorted[4] -= 1;
+			sorted[STEEL] += 1;
+		}else if( material_type == ALUM ){
 			LCDWriteStringXY(10, 0, "ALUM");
+			sorted[4] -= 1;
+			sorted[ALUM] += 1;
 		}
+		
 		//move stepper to section
 		if(material_type == curMode){
 			curMode = material_type;
@@ -544,14 +590,9 @@ ISR(INT3_vect){//on rising edge(active high)
 		//debounce
 		nTimer(25);
 		
-		//flip bit 0 of the direction
-		direction ^= 0x01;
-		//store inverse of current direction
-		change_dir = PORTB ^ 0b00001010;
-		//turn on in a and in b(break to Vcc)
-		PORTB |= 0b00001111;
-		nTimer(5);
-		PORTB = change_dir;
+		//flip bit 0 of the paused check
+		paused_check ^= 0x01;
+		STATE = pause;
 		
 		//debounce
 		while((PIND & 0x08) == 0x08);//loop while PD3 is high
