@@ -188,6 +188,7 @@ int main(void)
 	setup(&headptr, &tailptr);
 	curMode = 0;//to black
 	
+	
 	PORTB = 0b00001101;
 	
 	STATE = 0;
@@ -222,6 +223,8 @@ int main(void)
 	
 	PAUSE_STAGE:
 		PORTB = 0b00001111;//break to vcc
+		LCDClear();
+		LCDWriteString("PAUSED");
 		
 		//the paused prints
 		/*
@@ -242,11 +245,11 @@ int main(void)
 		
 		if(paused_check == 0x01){//toggle state
 			PORTB = 0b00001101;
-			STATE = polling;
-			goto POLLING_STAGE;
+			LCDClear();
+			
 		}
-	
-	goto PAUSE_STAGE;
+	STATE = polling;
+	goto POLLING_STAGE;
 	
     REFLECTIVE_STAGE:
 		
