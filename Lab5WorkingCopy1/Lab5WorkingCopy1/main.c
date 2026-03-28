@@ -47,6 +47,8 @@ volatile char STATE;
 volatile int curposition = 0b00110000;
 volatile uint16_t curmaterialmin;
 volatile int reflect_count = 0;
+volatile unsigned int ramped_down = 0;
+volatile uint8_t timer_running = 0;
 
 
 	//constants
@@ -308,8 +310,8 @@ int main(void)
 			enqueue(&headptr, &tailptr, &newlink);
 			sorted[4] += 1;//add 1 to the between sensors
 			
-			LCDWriteStringXY(0, 1, "Val Count:");
-			LCDWriteIntXY(11, 1, reflect_count, 5);
+			//LCDWriteStringXY(0, 1, "Val Count:");
+			//LCDWriteIntXY(11, 1, reflect_count, 5);
 			//nTimer(4000);
 		}
 		STATE = 0;
@@ -332,19 +334,19 @@ int main(void)
 		
 		
 		if( material_type == BLACK){
-			LCDWriteStringXY(10, 0, "BLACK");
+			//LCDWriteStringXY(10, 0, "BLACK");
 			sorted[4] -= 1;
 			sorted[BLACK] += 1;
 		}else if( material_type == WHITE ){
-			LCDWriteStringXY(10, 0, "WHITE");
+			//LCDWriteStringXY(10, 0, "WHITE");
 			sorted[4] -= 1;
 			sorted[WHITE] += 1;
 		}else if( material_type == STEEL ){
-			LCDWriteStringXY(10, 0, "STEEL");
+			//LCDWriteStringXY(10, 0, "STEEL");
 			sorted[4] -= 1;
 			sorted[STEEL] += 1;
 		}else if( material_type == ALUM ){
-			LCDWriteStringXY(10, 0, "ALUM");
+			//LCDWriteStringXY(10, 0, "ALUM");
 			sorted[4] -= 1;
 			sorted[ALUM] += 1;
 		}
@@ -363,10 +365,12 @@ int main(void)
 			curMode = material_type;
 		}
 		
-		
 		//start belt
 		PORTB = 0b00001101;
 	
+		if((ramped_down == 1) && (sorted[4] == 0)){
+			goto END_STAGE;
+		}
 	
 		//LCDClear();
 		//LCDWriteString("DROP");
@@ -374,11 +378,28 @@ int main(void)
 		goto POLLING_STAGE;
 		
 	END_STAGE:
-		STATE = 0;
+		
+		//give time to drop last piece
+		nTimer(500);
+		
 		PORTB |= 0b00001111;
 		LCDClear();
-		LCDWriteString("END");
-		nTimer(3000);
+		
+		LCDWriteStringXY(0, 0, "Ramped");
+		LCDWriteStringXY(0, 1, "Down:)");
+		
+		LCDWriteStringXY(7, 0, "B:");
+		LCDWriteIntXY(9, 0, sorted[BLACK], 2);
+		
+		LCDWriteStringXY(12, 0, "S:");
+		LCDWriteIntXY(14, 0, sorted[STEEL], 2);
+
+		LCDWriteStringXY(7, 1, "W:");
+		LCDWriteIntXY(9, 1, sorted[WHITE], 2);
+		
+		LCDWriteStringXY(12, 1, "A:");
+		LCDWriteIntXY(14, 1, sorted[ALUM], 2);
+		
 }
 
 void nTimer(int count){
@@ -432,7 +453,7 @@ void nTimer(int count){
 
 
 void home_stepper(){
-	for(int i = 0; i < 5000; i++){
+	for(int i = 0; i < 25; i++){
 		curposition++;
 		//test if valid
 		if(curposition > 3 ){
@@ -441,8 +462,9 @@ void home_stepper(){
 		//output A to current step
 		PORTA = steps_arr[curposition];
 		//delay 20ms
-		nTimer(20);
+		nTimer(15);
 	}
+	
 	while((PINL & 0b10000000) == 0b10000000 ){//Sensor_HE != 1;
 		//increment current position
 		curposition++;
@@ -571,6 +593,7 @@ ISR(ADC_vect){
 
 //int0 OR opposite reflect
 ISR(INT0_vect){
+	
 	if((PIND & 0x01) == 0x01){
 		STATE = reflective;
 	}
@@ -583,18 +606,50 @@ ISR(INT1_vect){
 	}
 }
 
-//int2 kill switch
+//int2 ramp down button
 ISR(INT2_vect){//on int2 falling edge(active low)
 	
-	PORTB |= 0b00001111;
-	LCDClear();
-	LCDWriteString("KILLED");
+	if (timer_running) return;
 
-	while(1);
+	ramped_down = 0;
+	timer_running = 1;
+
+	// Stop Timer3 while configuring
+	TCCR3B = 0;
+
+	// Clear control registers
+	TCCR3A = 0;
+	TCCR3B = 0;
+
+	// Reset counter
+	TCNT3 = 0;
+
+	// Set compare value for longest delay
+	OCR3A = 5535;
+
+	// Clear pending compare flag
+	TIFR3 |= (1 << OCF3A);
+
+	// Enable compare match A interrupt
+	TIMSK3 |= (1 << OCIE3A);
+
+	// CTC mode: WGM32 = 1
+	TCCR3B |= (1 << WGM32);
+
+	// Start timer with prescaler 1024
+	TCCR3B |= (1 << CS32) | (1 << CS30);
 	
 }
 
-//int3 change direction
+//timer 3 ISR (for ramp down timer)
+ISR(TIMER3_COMPA_vect)
+{
+	TCCR3B = 0;
+	timer_running = 0;
+	ramped_down = 1;
+}
+
+//int3 pause button
 ISR(INT3_vect){//on rising edge(active high)
 	if((PIND & 0x08) == 0x08){
 		//debounce
