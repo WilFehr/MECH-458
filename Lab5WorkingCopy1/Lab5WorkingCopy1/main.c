@@ -32,6 +32,12 @@
 #define pause 3
 #define ramp_down 4
 
+//stepper acceleration parameters
+#define CW 0
+#define CCW 1
+#define up 1
+#define down 0
+
 /******************    END OF DEFINES     *******************/
 
 
@@ -49,6 +55,8 @@ volatile uint16_t curmaterialmin;
 volatile int reflect_count = 0;
 volatile unsigned int ramped_down = 0;
 volatile uint8_t timer_running = 0;
+volatile int delay;
+volatile int min_delay = 50;
 
 
 	//constants
@@ -58,9 +66,15 @@ const char steps_arr[4] = {
 	0b00101101,  // A-, B-
 	0b00110101   // A+, B-
 };
+const uint8_t s_curve_25[25] = {
+	120,120,119,118,116,
+	114,111,108,104,100,
+	96,92,88,84,80,
+	76,72,68,64,60,
+	56,52,48,44,40
+};
 	
 	//non-volatile
-int delay = 10;//ms delay
 char curMode;
 link* headptr;
 link* tailptr;
@@ -75,6 +89,7 @@ char sorted[5] = {0, 0, 0, 0, 0};//Black, Steel, White, Alum, between sensor
 
 /***********    START OF FUNCTION DECLARATIONS   ***************/
 void nTimer(int count);
+void s_accel(int step_dir, int step_accel_dir);//s curve acceleration
 void home_stepper();//home in on black
 void turnCW90();//turn stepper
 void turnCCW90();//turn stepper
@@ -217,6 +232,7 @@ int main(void)
 		break;
 		
 		case(drop_result):
+		//static int end_pending = 1;
 		goto DROP_STAGE;
 		break;
 		
@@ -264,6 +280,7 @@ int main(void)
 		
 		curmaterialmin = 1024;
 		reflect_count = 0;
+		int count_since_min = 0;
 		
 		while((PIND & 0x01) == 0x01 ){//OR pin is active
 			if(ADC_result_flag == 0){
@@ -271,11 +288,17 @@ int main(void)
 			}else{
 				if(ADC_result < curmaterialmin){
 					curmaterialmin = ADC_result;
+					count_since_min = 0;
+				}else{
+					count_since_min++;
 				}
 				ADC_result_flag = 0;
 				reflect_count++;
 			}//end of ADC result check
-		
+			
+			if(count_since_min == 500){
+				break;
+			}
 			
 		}//end of while
 		
@@ -323,7 +346,7 @@ int main(void)
 		
 		//brake to vcc
 		PORTB |= 0b00001111;
-		nTimer(25);
+		nTimer(250);
 		
 		char material_type = 0;
 		
@@ -374,13 +397,12 @@ int main(void)
 	
 		//LCDClear();
 		//LCDWriteString("DROP");
-		//nTimer(3000);
 		goto POLLING_STAGE;
 		
 	END_STAGE:
 		
 		//give time to drop last piece
-		nTimer(500);
+		nTimer(5000);
 		
 		PORTB |= 0b00001111;
 		LCDClear();
@@ -417,7 +439,7 @@ void nTimer(int count){
 	
 	//output compare register
 	//16 bit clock
-	OCR1A = 0x03E8;//1000 clock cycles(clock is 1MHZ, so each cycle is 1us) - 1ms
+	OCR1A = 0x0064;//1000 clock cycles(clock is 1MHZ, so each cycle is 1us) - 1ms
 	
 	//initialize timer counter
 	TCNT1 = 0x0000;
@@ -451,9 +473,73 @@ void nTimer(int count){
 	return;
 }//end nTimer
 
+void s_accel(int step_dir, int step_accel_dir) {
+
+	if(step_accel_dir == up){	for(int i = 0; i < 25; i++) {
+		
+			if(step_dir == CCW){
+				
+				LCDClear();
+				LCDWriteStringXY(0, 0, "CCW Up");
+				//nTimer(1000);
+				
+				curposition--;
+				if(curposition < 0){
+					curposition = 3;
+				}
+			}else{
+				
+				LCDClear();
+				LCDWriteStringXY(0, 0, "CW Up");
+				//nTimer(1000);
+				
+				curposition++;
+				if(curposition > 3 ){
+					curposition = 0;
+				}
+			}
+
+			PORTA = steps_arr[curposition];
+
+			delay = s_curve_25[i];   // 0.1 ms units
+			nTimer(delay);
+		}
+	}else{	for(int i = 24; i >= 0; i--) {
+
+			if(step_dir == CCW){
+				
+				LCDClear();
+				LCDWriteStringXY(0, 0, "CCW Down");
+				//nTimer(1000);
+				
+				curposition--;
+				if(curposition < 0){
+					curposition = 3;
+				}
+			}else{
+				
+				LCDClear();
+				LCDWriteStringXY(0, 0, "CW Down");
+				//nTimer(1000);
+				
+				curposition++;
+				if(curposition > 3 ){
+					curposition = 0;
+				}
+			}
+
+			PORTA = steps_arr[curposition];
+
+			delay = s_curve_25[i];   // 0.1 ms units
+			nTimer(delay);
+		}//end of for
+	}
+	return;
+}
 
 void home_stepper(){
-	for(int i = 0; i < 25; i++){
+	
+		for(int i = 0; i < 25; i++){
 		curposition++;
 		//test if valid
 		if(curposition > 3 ){
@@ -462,7 +548,7 @@ void home_stepper(){
 		//output A to current step
 		PORTA = steps_arr[curposition];
 		//delay 20ms
-		nTimer(15);
+		nTimer(150);
 	}
 	
 	while((PINL & 0b10000000) == 0b10000000 ){//Sensor_HE != 1;
@@ -475,36 +561,33 @@ void home_stepper(){
 		//output A to current step
 		PORTA = steps_arr[curposition];
 		//delay 20ms
-		nTimer(20);
+		nTimer(200);
 	}
 }
 
-//trap accel
+//s accel
 void turnCW90(){
-	delay = 20;
-	for(int i =0; i < 50; i++){
-		//increment current position
-		curposition++;
-		//test if valid
-		if(curposition > 3 ){
-			curposition = 0;
-		}
-		//output A to current step
-		PORTA = steps_arr[curposition];
-		
-		delay = ((i<10)?(20-(1+i)/2):10);
-		delay = ((i>39)?(i-30):(delay));
-		//delay 20ms-
-		nTimer(delay);
-		
-	}//end for
+	
+	s_accel(CW,up);
+	s_accel(CW,down);
 	
 	return;
 }//end cw
 
-//trap accel
+//s accel
 void turnCCW90(){
-	delay = 20;
+	
+	s_accel(CCW,up);
+	s_accel(CCW,down);
+	
+	return;
+}
+
+//s accel
+void turnCCW180(){
+	
+	s_accel(CCW,up);
+	
 	for(int i =0; i < 50; i++){
 		//increment curposition(can use ternary and assignment) and
 		curposition--;
@@ -514,46 +597,21 @@ void turnCCW90(){
 		}
 		//output A to current step
 		PORTA = steps_arr[curposition];
-		//delay 20ms
-		
-		delay = ((i<10)?(20-(1+i)/2):10);
-		delay = ((i>39)?(i-30):(delay));
-		//delay 20ms-
-		nTimer(delay);
-		
+				
+		nTimer(min_delay);
 	}
+	
+	s_accel(CCW,down);
 	
 	return;
 }
 
-//trap accel
-void turnCCW180(){
-	delay = 20;
-	for(int i =0; i < 100; i++){
-		//increment curposition(can use ternary and assignment) and
-		curposition--;
-		//test if valid
-		if(curposition < 0 ){
-			curposition = 3;
-		}
-		//output A to current step
-		PORTA = steps_arr[curposition];
-		//delay 20ms
-		
-		delay = ((i<10)?(20-(1+i)/2):10);
-		delay = ((i>89)?(i-80):(delay));
-		//delay 20ms-
-		nTimer(delay);
-		
-	}
-	
-	return;
-}
-
-//trap accel
+//s accel
 void turnCW180(){
-	delay = 20;
-	for(int i =0; i < 100; i++){
+	
+	s_accel(CW,up);
+	
+	for(int i =0; i < 50; i++){
 		//increment current position
 		curposition++;
 		//test if valid
@@ -563,12 +621,11 @@ void turnCW180(){
 		//output A to current step
 		PORTA = steps_arr[curposition];
 		
-		delay = ((i<10)?(20-(1+i)/2):10);
-		delay = ((i>89)?(i-80):(delay));
-		//delay 20ms-
-		nTimer(delay);
+		nTimer(min_delay);
 		
-	}//end for
+	}
+	
+	s_accel(CW,down);
 	
 	return;
 }//end cw
@@ -653,7 +710,7 @@ ISR(TIMER3_COMPA_vect)
 ISR(INT3_vect){//on rising edge(active high)
 	if((PIND & 0x08) == 0x08){
 		//debounce
-		nTimer(25);
+		nTimer(250);
 		
 		//flip bit 0 of the paused check
 		paused_check ^= 0x01;
@@ -661,7 +718,7 @@ ISR(INT3_vect){//on rising edge(active high)
 		
 		//debounce
 		while((PIND & 0x08) == 0x08);//loop while PD3 is high
-		nTimer(25);
+		nTimer(250);
 	}
 	
 }
@@ -670,5 +727,5 @@ ISR(BADISR_vect)
 {
 	LCDClear();
 	LCDWriteString("ISR BAD");
-	nTimer(3000);
+	nTimer(30000);
 }
