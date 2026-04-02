@@ -57,6 +57,8 @@ volatile unsigned int ramped_down = 0;
 volatile uint8_t timer_running = 0;
 volatile int delay;
 volatile int min_delay = 50;
+volatile int EX_Flag = 0;
+volatile int OR_Flag = 0;
 
 
 	//constants
@@ -198,7 +200,7 @@ int main(void)
 	 TCCR0A |= 0b10000011;//sets both WGM01 and WGM00 to one also set COM0A1 to one,
  
 	 //Timer counter 2
-	 TCCR0B |= 0b00000011; //divide clock by 8(still too big) makes it 3.9kHz, 64 0b00000011
+	 TCCR0B |= 0b00000011; //divide clock by 8(still too big) makes it 488Hz, 64 0b00000011
  
 	 //output compare register
 	 //8 bit count this is duty cycle
@@ -278,9 +280,10 @@ int main(void)
 	
     REFLECTIVE_STAGE:
 		
+		STATE = 0;
 		curmaterialmin = 1024;
 		reflect_count = 0;
-		int count_since_min = 0;
+		//int count_since_min = 0;
 		
 		while((PIND & 0x01) == 0x01 ){//OR pin is active
 			if(ADC_result_flag == 0){
@@ -288,18 +291,18 @@ int main(void)
 			}else{
 				if(ADC_result < curmaterialmin){
 					curmaterialmin = ADC_result;
-					count_since_min = 0;
-				}else{
-					count_since_min++;
+					//count_since_min = 0;
+				//}else{
+					//count_since_min++;
 				}
 				ADC_result_flag = 0;
 				reflect_count++;
 			}//end of ADC result check
-			
+			/*
 			if(count_since_min == 500){
 				break;
 			}
-			
+			*/
 		}//end of while
 		
 		
@@ -332,12 +335,14 @@ int main(void)
 			newlink->e.itemCode = material_type;
 			enqueue(&headptr, &tailptr, &newlink);
 			sorted[4] += 1;//add 1 to the between sensors
-			
+						
 			//LCDWriteStringXY(0, 1, "Val Count:");
 			//LCDWriteIntXY(11, 1, reflect_count, 5);
 			//nTimer(4000);
 		}
-		STATE = 0;
+		
+		OR_Flag = 0;
+		
 		goto POLLING_STAGE;
 		
 		
@@ -390,6 +395,8 @@ int main(void)
 		
 		//start belt
 		PORTB = 0b00001101;
+		nTimer(1);
+		EX_Flag = 0;
 	
 		if((ramped_down == 1) && (sorted[4] == 0)){
 			goto END_STAGE;
@@ -475,24 +482,18 @@ void nTimer(int count){
 
 void s_accel(int step_dir, int step_accel_dir) {
 
-	if(step_accel_dir == up){	for(int i = 0; i < 25; i++) {
+	if(step_accel_dir == up){	
+		
+		for(int i = 0; i < 25; i++) {
 		
 			if(step_dir == CCW){
-				
-				LCDClear();
-				LCDWriteStringXY(0, 0, "CCW Up");
-				//nTimer(1000);
 				
 				curposition--;
 				if(curposition < 0){
 					curposition = 3;
 				}
 			}else{
-				
-				LCDClear();
-				LCDWriteStringXY(0, 0, "CW Up");
-				//nTimer(1000);
-				
+
 				curposition++;
 				if(curposition > 3 ){
 					curposition = 0;
@@ -504,24 +505,18 @@ void s_accel(int step_dir, int step_accel_dir) {
 			delay = s_curve_25[i];   // 0.1 ms units
 			nTimer(delay);
 		}
-	}else{	for(int i = 24; i >= 0; i--) {
+	}else{	
+		
+		for(int i = 24; i >= 0; i--) {
 
 			if(step_dir == CCW){
-				
-				LCDClear();
-				LCDWriteStringXY(0, 0, "CCW Down");
-				//nTimer(1000);
 				
 				curposition--;
 				if(curposition < 0){
 					curposition = 3;
 				}
 			}else{
-				
-				LCDClear();
-				LCDWriteStringXY(0, 0, "CW Down");
-				//nTimer(1000);
-				
+
 				curposition++;
 				if(curposition > 3 ){
 					curposition = 0;
@@ -630,18 +625,7 @@ void turnCW180(){
 	return;
 }//end cw
 
-/*
-
-isr
-
-pause/resume
-
-
-ramp down
-use external timer
-
-
-*/
+ //interrupts start here
 ISR(ADC_vect){
 	ADC_result = ADCL;
 	ADC_result += (ADCH << 8);//adjust to 10bit mode
@@ -651,14 +635,16 @@ ISR(ADC_vect){
 //int0 OR opposite reflect
 ISR(INT0_vect){
 	
-	if((PIND & 0x01) == 0x01){
+	if(((PIND & 0x01) == 0x01) && (OR_Flag == 0)){
+		OR_Flag = 1;
 		STATE = reflective;
 	}
 }
 
 //int1 EX end of belt sensor
 ISR(INT1_vect){
-	if((PIND & 0x02) != 0x02){
+	if(((PIND & 0x02) != 0x02) && (EX_Flag == 0)){
+		EX_Flag = 1;
 		STATE = drop_result;
 	}
 }
