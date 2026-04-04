@@ -164,12 +164,12 @@ int main(void)
 	// config the external interrupt ======================================
 	//table15-1
 	EIMSK |= (_BV(INT0)); // enable INT0
-	EICRA |= _BV(ISC01); // rising edge interrupt
-	EICRA |= _BV(ISC00); // rising edge interrupt
+	EICRA |= _BV(ISC01); // falling edge interrupt
+	EICRA &= ~_BV(ISC00); // falling edge interrupt
 	
 	EIMSK |= (_BV(INT1)); // enable INT1
-	EICRA |= _BV(ISC11); // falling edge interrupt
-	EICRA &= ~_BV(ISC10); // falling edge interrupt
+	EICRA |= _BV(ISC11); // rising edge interrupt
+	EICRA |= _BV(ISC10); // rising edge interrupt
 	
 	EIMSK |= (_BV(INT2)); // enable INT2
 	EICRA |= _BV(ISC21); // falling edge interrupt
@@ -285,7 +285,7 @@ int main(void)
 		reflect_count = 0;
 		//int count_since_min = 0;
 		
-		while((PIND & 0x01) == 0x01 ){//OR pin is active
+		while((PIND & 0x02) == 0x02 ){//OR pin is active
 			if(ADC_result_flag == 0){
 				ADCSRA |= _BV(ADSC);//analog digital start one conversion
 			}else{
@@ -310,7 +310,7 @@ int main(void)
 		//while((PIND & 0x01) == 0x01);
 		//nTimer(25);
 		
-		if(reflect_count > 0){
+		if((reflect_count > 0) && (curmaterialmin < 1015)){
 
 			//add material to queue
 			//(before adding check with display)
@@ -351,7 +351,7 @@ int main(void)
 		
 		//brake to vcc
 		PORTB |= 0b00001111;
-		nTimer(250);
+		nTimer(100);
 		
 		char material_type = 0;
 		
@@ -395,7 +395,7 @@ int main(void)
 		
 		//start belt
 		PORTB = 0b00001101;
-		nTimer(1);
+		nTimer(25);
 		EX_Flag = 0;
 	
 		if((ramped_down == 1) && (sorted[4] == 0)){
@@ -632,20 +632,21 @@ ISR(ADC_vect){
 	ADC_result_flag = 1;
 }
 
-//int0 OR opposite reflect
+//int0 EX end of belt sensor
 ISR(INT0_vect){
+	
+	if(((PIND & 0x02) != 0x02) && (EX_Flag == 0)){
+		EX_Flag = 1;
+		STATE = drop_result;
+	}
+}
+
+//int1 OR opposite reflect
+ISR(INT1_vect){
 	
 	if(((PIND & 0x01) == 0x01) && (OR_Flag == 0)){
 		OR_Flag = 1;
 		STATE = reflective;
-	}
-}
-
-//int1 EX end of belt sensor
-ISR(INT1_vect){
-	if(((PIND & 0x02) != 0x02) && (EX_Flag == 0)){
-		EX_Flag = 1;
-		STATE = drop_result;
 	}
 }
 
@@ -684,14 +685,6 @@ ISR(INT2_vect){//on int2 falling edge(active low)
 	
 }
 
-//timer 3 ISR (for ramp down timer)
-ISR(TIMER3_COMPA_vect)
-{
-	TCCR3B = 0;
-	timer_running = 0;
-	ramped_down = 1;
-}
-
 //int3 pause button
 ISR(INT3_vect){//on rising edge(active high)
 	if((PIND & 0x08) == 0x08){
@@ -707,6 +700,14 @@ ISR(INT3_vect){//on rising edge(active high)
 		nTimer(250);
 	}
 	
+}
+
+//timer 3 ISR (for ramp down timer)
+ISR(TIMER3_COMPA_vect)
+{
+	TCCR3B = 0;
+	timer_running = 0;
+	ramped_down = 1;
 }
 
 ISR(BADISR_vect)
