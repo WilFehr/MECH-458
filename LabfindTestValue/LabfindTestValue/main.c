@@ -291,11 +291,18 @@ int main(void)
 			}else{
 				if(ADC_result < curmaterialmin){
 					curmaterialmin = ADC_result;
+					//count_since_min = 0;
+				//}else{
+					//count_since_min++;
 				}
 				ADC_result_flag = 0;
 				reflect_count++;
 			}//end of ADC result check
-			
+			/*
+			if(count_since_min == 500){
+				break;
+			}
+			*/
 		}//end of while
 		
 		
@@ -310,47 +317,20 @@ int main(void)
 			
 			char material_type = 0;
 		
-			if(curmaterialmin > 937){//black
+			if(curmaterialmin > 930){//black
 				material_type = BLACK;
-				
-				LCDClear();
-				LCDWriteStringXY(0, 0, "cur mat: ");
-				LCDWriteIntXY(9, 0, material_type, 1);
-				LCDWriteStringXY(0, 1, "cur val: ");
-				LCDWriteIntXY(9, 1, curmaterialmin, 4);
-				//*/
 			}else if(curmaterialmin > 700){//white
 				material_type = WHITE;
-				
-				LCDClear();
-				LCDWriteStringXY(0, 0, "cur mat: ");
-				LCDWriteIntXY(9, 0, material_type, 1);
-				LCDWriteStringXY(0, 1, "cur val: ");
-				LCDWriteIntXY(9, 1, curmaterialmin, 4);
-				//*/
-			}else if(curmaterialmin > 200){//steel
+			}else if(curmaterialmin > 300){//steel
 				material_type = STEEL;
-				
-				LCDClear();
-				LCDWriteStringXY(0, 0, "cur mat: ");
-				LCDWriteIntXY(9, 0, material_type, 1);
-				LCDWriteStringXY(0, 1, "cur val: ");
-				LCDWriteIntXY(9, 1, curmaterialmin, 4);
-				//*/
 			}else{//alum
 				material_type = ALUM;
-				
-				LCDClear();
-				LCDWriteStringXY(0, 0, "cur mat: ");
-				LCDWriteIntXY(9, 0, material_type, 1);
-				LCDWriteStringXY(0, 1, "cur val: ");
-				LCDWriteIntXY(9, 1, curmaterialmin, 4);
-				//*/
 			}
 			
 			
 			
 			//create link
+			//idk how this work so this is a guess
 			initLink(&newlink);
 			newlink->e.itemCode = material_type;
 			enqueue(&headptr, &tailptr, &newlink);
