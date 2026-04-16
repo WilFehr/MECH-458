@@ -59,6 +59,8 @@ volatile int delay;
 volatile int min_delay = 50;
 volatile int EX_Flag = 0;
 volatile int OR_Flag = 0;
+volatile int duplicate_mat = 0;
+//volatile int timer4_running = 0;
 
 
 	//constants
@@ -68,12 +70,13 @@ const char steps_arr[4] = {
 	0b00101101,  // A-, B-
 	0b00110101   // A+, B-
 };
+
 const uint8_t s_curve_25[25] = {
-	120,120,119,118,116,
-	114,111,108,104,100,
-	96,92,88,84,80,
-	76,72,68,64,60,
-	56,52,48,44,40
+	130,130,129,128,126,
+	124,121,118,114,110,
+	106,102,98,94,90,
+	86,82,78,74,70,
+	66,62,58,54,50
 };
 	
 	//non-volatile
@@ -84,6 +87,7 @@ link* newlink;
 link *rtnlink;		
 element eTest;
 char sorted[5] = {0, 0, 0, 0, 0};//Black, Steel, White, Alum, between sensor
+char ccw_flag = 0;
 /****************    END OF GLOBAL VARIABLES   *****************/
 
 
@@ -97,6 +101,8 @@ void turnCW90();//turn stepper
 void turnCCW90();//turn stepper
 void turnCW180();//turn stepper
 void turnCCW180();//turn stepper
+//void timer4_init();
+//void timer4_activate(uint16_t compare_value);
 /***********    END OF FUCTION DECLARATIONS   ***************/
 
 
@@ -191,6 +197,11 @@ int main(void)
 	ADMUX |= _BV(REFS0); // Read Technical Manual & Complete Comment
 
 /********** END ADC CONFIG ***************/
+
+/*******     timer 4 start   ******/
+	//void timer4_init();
+
+/********* timer 4 end *******/
 	
 	sei();//global interrupt enable
 	
@@ -204,7 +215,7 @@ int main(void)
  
 	 //output compare register
 	 //8 bit count this is duty cycle
-	 OCR0A = 0x60;//96(37.5%?)
+	OCR0A = 0x70;//(50%?) 0x60 - 37.5%, 0x80 - 50%
  /****************          END PWM INIT             **************************/
 	
 	home_stepper();
@@ -284,6 +295,11 @@ int main(void)
 		curmaterialmin = 1024;
 		reflect_count = 0;
 		//int count_since_min = 0;
+		/*
+		if( timer4_running == 0 ){
+			timer4_activate(500);
+			timer4_running = 1;
+		}//*/
 		
 		while((PIND & 0x02) == 0x02 ){//OR pin is active
 			if(ADC_result_flag == 0){
@@ -298,11 +314,6 @@ int main(void)
 			
 		}//end of while
 		
-		
-		
-		//while((PIND & 0x01) == 0x01);
-		//nTimer(25);
-		
 		if((reflect_count > 0) && (curmaterialmin < 1015)){
 
 			//add material to queue
@@ -310,9 +321,9 @@ int main(void)
 			
 			char material_type = 0;
 		
-			if(curmaterialmin > 937){//black
+			if(curmaterialmin > 915){//black
 				material_type = BLACK;
-				
+				/*
 				LCDClear();
 				LCDWriteStringXY(0, 0, "cur mat: ");
 				LCDWriteIntXY(9, 0, material_type, 1);
@@ -321,16 +332,16 @@ int main(void)
 				//*/
 			}else if(curmaterialmin > 700){//white
 				material_type = WHITE;
-				
+				/*
 				LCDClear();
 				LCDWriteStringXY(0, 0, "cur mat: ");
 				LCDWriteIntXY(9, 0, material_type, 1);
 				LCDWriteStringXY(0, 1, "cur val: ");
 				LCDWriteIntXY(9, 1, curmaterialmin, 4);
 				//*/
-			}else if(curmaterialmin > 200){//steel
+			}else if(curmaterialmin > 100){//steel
 				material_type = STEEL;
-				
+				/*
 				LCDClear();
 				LCDWriteStringXY(0, 0, "cur mat: ");
 				LCDWriteIntXY(9, 0, material_type, 1);
@@ -339,7 +350,7 @@ int main(void)
 				//*/
 			}else{//alum
 				material_type = ALUM;
-				
+				/*
 				LCDClear();
 				LCDWriteStringXY(0, 0, "cur mat: ");
 				LCDWriteIntXY(9, 0, material_type, 1);
@@ -370,9 +381,11 @@ int main(void)
 		STATE = 0;
 		
 		//brake to vcc
-		PORTB |= 0b00001111;
-		nTimer(100);
-		
+		if(duplicate_mat == 0){
+			PORTB |= 0b00001111;	
+		}
+		//nTimer(100);
+			
 		char material_type = 0;
 		
 		//read material from queue
@@ -380,7 +393,20 @@ int main(void)
 		material_type = rtnlink->e.itemCode;
 		free(rtnlink);
 		
+		//look ahead
+		char next_mat_type = firstValue(&headptr).itemCode;
 		
+		if((headptr != NULL) && (next_mat_type == material_type)){
+			duplicate_mat = 1;
+		}else{
+			duplicate_mat = 0;
+			
+		}//*/
+		
+		
+		//(firstValue(&headptr).itemCode == material_type) ? duplicate_mat = 1 :duplicate_mat = 0;
+		//*/	
+
 		if( material_type == BLACK){
 			//LCDWriteStringXY(10, 0, "BLACK");
 			sorted[4] -= 1;
@@ -413,17 +439,29 @@ int main(void)
 			curMode = material_type;
 		}
 		
+		/*
+		if(sorted[4]==0){
+			OCR0A = 0x60;
+		}//*/
+		
 		//start belt
 		PORTB = 0b00001101;
-		nTimer(25);
+		nTimer(75);
+		//re-enable EX gate
 		EX_Flag = 0;
-	
+		nTimer(75);
+		
+		if(ccw_flag == 1){
+			nTimer(75);
+		}
+			
 		if((ramped_down == 1) && (sorted[4] == 0)){
 			goto END_STAGE;
 		}
 	
 		//LCDClear();
 		//LCDWriteString("DROP");
+
 		goto POLLING_STAGE;
 		
 	END_STAGE:
@@ -450,6 +488,28 @@ int main(void)
 		LCDWriteIntXY(14, 1, sorted[ALUM], 2);
 		
 }
+
+/*
+void timer4_init()
+{
+	TCCR4A = 0;                  // normal output mode
+	TCCR4B = 0;                  // timer off for now
+
+	TCCR4B |= (1 << WGM42);      // CTC mode
+	TIMSK4 |= (1 << OCIE4A);     // enable compare match A interrupt
+}//*/
+
+/*
+void timer4_activate(uint16_t compare_value)
+{
+	TCNT4 = 0;                   // reset timer count
+	OCR4A = compare_value;       // set compare value
+	TIFR4 |= (1 << OCF4A);       // clear old compare flag if needed
+
+	TCCR4B &= ~((1 << CS42) | (1 << CS41) | (1 << CS40)); // stop clock bits
+	TCCR4B |= (1 << WGM42);      // make sure CTC stays set
+	TCCR4B |= (1 << CS42) | (1 << CS40);   // start timer, prescaler 1024
+}//*/
 
 void nTimer(int count){
 	//variables
@@ -554,7 +614,7 @@ void s_accel(int step_dir, int step_accel_dir) {
 
 void home_stepper(){
 	
-		for(int i = 0; i < 25; i++){
+	for(int i = 0; i < 25; i++){
 		curposition++;
 		//test if valid
 		if(curposition > 3 ){
@@ -578,11 +638,23 @@ void home_stepper(){
 		//delay 20ms
 		nTimer(200);
 	}
+	
+	for(int i = 0; i < 4; i++){
+		curposition--;
+		//test if valid
+		if(curposition < 0 ){
+			curposition = 3;
+		}
+		//output A to current step
+		PORTA = steps_arr[curposition];
+		//delay 20ms
+		nTimer(200);
+	}
 }
 
 //s accel
 void turnCW90(){
-	
+	ccw_flag = 0;
 	s_accel(CW,up);
 	s_accel(CW,down);
 	
@@ -592,6 +664,7 @@ void turnCW90(){
 //s accel
 void turnCCW90(){
 	
+	ccw_flag = 1;
 	s_accel(CCW,up);
 	s_accel(CCW,down);
 	
@@ -600,7 +673,7 @@ void turnCCW90(){
 
 //s accel
 void turnCCW180(){
-	
+	ccw_flag = 1;
 	s_accel(CCW,up);
 	
 	for(int i =0; i < 50; i++){
@@ -623,7 +696,7 @@ void turnCCW180(){
 
 //s accel
 void turnCW180(){
-	
+	ccw_flag = 0;
 	s_accel(CW,up);
 	
 	for(int i =0; i < 50; i++){
@@ -729,6 +802,17 @@ ISR(TIMER3_COMPA_vect)
 	timer_running = 0;
 	ramped_down = 1;
 }
+
+
+//timer 4 ISR (belt motor decel)
+/*ISR(TIMER4_COMPA_vect)
+{
+	LCDClear();
+	LCDWriteStringXY(0, 0, "time 4");
+	TCCR4B = 0; // resets timer
+	OCR0A = 0x10; // PWM 12% duty cycle
+	timer4_running = 0;//set running to 0 at end of timer
+}//*/
 
 ISR(BADISR_vect)
 {
